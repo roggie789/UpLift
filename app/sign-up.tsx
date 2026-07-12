@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { getAuthRedirectUri } from '@/lib/authRedirect';
 import { GameButton } from '@/components/GameButton';
 import { GameTextInput } from '@/components/GameTextInput';
 import { colors, spacing, typography } from '@theme';
@@ -19,8 +20,10 @@ export default function SignUpScreen() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      // The handle_new_user trigger reads display_name into the profiles row
-      options: { data: { display_name: displayName.trim() || 'Lifter' } },
+      options: {
+        data: { display_name: displayName.trim() || 'Lifter' },
+        emailRedirectTo: getAuthRedirectUri(),
+      },
     });
     setLoading(false);
 
