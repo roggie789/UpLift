@@ -1,5 +1,6 @@
 -- UpLift database schema (matches the ER diagram on the Miro planning board)
--- Run in the Supabase SQL editor, or via: supabase db push
+-- ALREADY APPLIED to the Supabase project (kkldtzcabmejkmdeckqz) as migrations
+-- `initial_schema` and `lock_down_handle_new_user`. Kept here as reference.
 
 create extension if not exists "uuid-ossp";
 
@@ -109,64 +110,108 @@ create table streaks (
   updated_at timestamptz not null default now()
 );
 
+-- ---------- Indexes on foreign keys used by list queries ----------
+
+create index idx_workout_templates_user on workout_templates (user_id, position);
+create index idx_template_exercises_template on template_exercises (template_id, order_index);
+create index idx_template_exercises_exercise on template_exercises (exercise_id);
+create index idx_workout_sessions_user_started on workout_sessions (user_id, started_at desc);
+create index idx_workout_sessions_template on workout_sessions (template_id);
+create index idx_session_exercises_session on session_exercises (session_id, order_index);
+create index idx_session_exercises_exercise on session_exercises (exercise_id);
+create index idx_set_logs_session_exercise on set_logs (session_exercise_id);
+create index idx_personal_records_user_exercise on personal_records (user_id, exercise_id);
+create index idx_personal_records_exercise on personal_records (exercise_id);
+create index idx_personal_records_set_log on personal_records (set_log_id);
+create index idx_xp_events_user on xp_events (user_id);
+create index idx_xp_events_session on xp_events (session_id);
+create index idx_achievements_user on achievements (user_id);
+create index idx_exercises_created_by on exercises (created_by);
+
 -- ---------- Row Level Security ----------
 -- Every table is locked to the owning user; the app talks straight to
--- Postgres with the anon key and these policies do the authorization.
+-- Postgres with the publishable key and these policies do the authorization.
+-- auth.uid() is wrapped in (select ...) so Postgres evaluates it once per
+-- query instead of once per row (RLS performance best practice).
 
 alter table profiles enable row level security;
-create policy "own profile" on profiles for all using (id = auth.uid()) with check (id = auth.uid());
+create policy "own profile" on profiles for all using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 alter table exercises enable row level security;
-create policy "read exercises" on exercises for select using (is_custom = false or created_by = auth.uid());
-create policy "create custom exercises" on exercises for insert with check (is_custom = true and created_by = auth.uid());
+create policy "read exercises" on exercises for select using (is_custom = false or created_by = (select auth.uid()));
+create policy "create custom exercises" on exercises for insert with check (is_custom = true and created_by = (select auth.uid()));
 
 alter table workout_templates enable row level security;
-create policy "own templates" on workout_templates for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own templates" on workout_templates for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 alter table template_exercises enable row level security;
 create policy "own template exercises" on template_exercises for all
-  using (exists (select 1 from workout_templates t where t.id = template_id and t.user_id = auth.uid()))
-  with check (exists (select 1 from workout_templates t where t.id = template_id and t.user_id = auth.uid()));
+  using (exists (select 1 from workout_templates t where t.id = template_id and t.user_id = (select auth.uid())))
+  with check (exists (select 1 from workout_templates t where t.id = template_id and t.user_id = (select auth.uid())));
 
 alter table workout_sessions enable row level security;
-create policy "own sessions" on workout_sessions for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own sessions" on workout_sessions for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 alter table session_exercises enable row level security;
 create policy "own session exercises" on session_exercises for all
-  using (exists (select 1 from workout_sessions s where s.id = session_id and s.user_id = auth.uid()))
-  with check (exists (select 1 from workout_sessions s where s.id = session_id and s.user_id = auth.uid()));
+  using (exists (select 1 from workout_sessions s where s.id = session_id and s.user_id = (select auth.uid())))
+  with check (exists (select 1 from workout_sessions s where s.id = session_id and s.user_id = (select auth.uid())));
 
 alter table set_logs enable row level security;
 create policy "own set logs" on set_logs for all
   using (exists (
     select 1 from session_exercises se
     join workout_sessions s on s.id = se.session_id
-    where se.id = session_exercise_id and s.user_id = auth.uid()
+    where se.id = session_exercise_id and s.user_id = (select auth.uid())
   ))
   with check (exists (
     select 1 from session_exercises se
     join workout_sessions s on s.id = se.session_id
-    where se.id = session_exercise_id and s.user_id = auth.uid()
+    where se.id = session_exercise_id and s.user_id = (select auth.uid())
   ));
 
 alter table personal_records enable row level security;
-create policy "own prs" on personal_records for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own prs" on personal_records for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 alter table xp_events enable row level security;
-create policy "own xp events" on xp_events for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own xp events" on xp_events for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 alter table achievements enable row level security;
-create policy "own achievements" on achievements for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own achievements" on achievements for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 alter table streaks enable row level security;
-create policy "own streak" on streaks for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own streak" on streaks for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+
+-- ---------- Auto-create profile and streak on signup ----------
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (new.id, coalesce(new.raw_user_meta_data->>'display_name', 'Lifter'));
+  insert into public.streaks (user_id) values (new.id);
+  return new;
+end $$;
+
+-- Only the auth trigger may run this — never the public RPC endpoint.
+revoke execute on function public.handle_new_user() from anon, authenticated, public;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
 
 -- ---------- RPCs ----------
 
 -- Creates a template plus its exercises in one call.
 create or replace function create_template(p_name text, p_icon text, p_exercises jsonb)
 returns uuid
-language plpgsql security invoker as $$
+language plpgsql security invoker
+set search_path = public
+as $$
 declare
   v_template_id uuid;
   v_row jsonb;
@@ -198,7 +243,9 @@ create or replace function finish_workout(
   p_exercises jsonb
 )
 returns uuid
-language plpgsql security invoker as $$
+language plpgsql security invoker
+set search_path = public
+as $$
 declare
   v_session_id uuid;
   v_session_exercise_id uuid;
@@ -235,6 +282,49 @@ begin
 
   return v_session_id;
 end $$;
+
+-- Returns per-exercise all-time bests (for PR detection) and the sets from
+-- the most recent session (for input placeholders) in ONE call — the single
+-- API read needed to start a workout.
+create or replace function get_workout_prep(p_exercise_ids uuid[])
+returns table (
+  exercise_id uuid,
+  max_weight_kg numeric,
+  max_reps int,
+  last_sets jsonb
+)
+language sql security invoker
+set search_path = public
+as $$
+  with my_sets as (
+    select se.exercise_id, sl.weight_kg, sl.reps, s.started_at, sl.set_number
+    from set_logs sl
+    join session_exercises se on se.id = sl.session_exercise_id
+    join workout_sessions s on s.id = se.session_id
+    where s.user_id = auth.uid()
+      and se.exercise_id = any(p_exercise_ids)
+  ),
+  bests as (
+    select exercise_id, max(weight_kg) as max_weight_kg, max(reps) as max_reps
+    from my_sets
+    group by exercise_id
+  ),
+  last_session as (
+    select distinct on (exercise_id) exercise_id, started_at
+    from my_sets
+    order by exercise_id, started_at desc
+  ),
+  last_sets as (
+    select m.exercise_id,
+      jsonb_agg(jsonb_build_object('weight_kg', m.weight_kg, 'reps', m.reps) order by m.set_number) as sets
+    from my_sets m
+    join last_session l on l.exercise_id = m.exercise_id and l.started_at = m.started_at
+    group by m.exercise_id
+  )
+  select b.exercise_id, b.max_weight_kg, b.max_reps, coalesce(ls.sets, '[]'::jsonb)
+  from bests b
+  left join last_sets ls on ls.exercise_id = b.exercise_id
+$$;
 
 -- ---------- Seed: starter exercise library ----------
 

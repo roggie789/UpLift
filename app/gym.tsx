@@ -37,6 +37,7 @@ export default function GymScreen() {
         )}
       />
       <View style={styles.footer}>
+        <GameButton label="🛠  Build a deck" onPress={() => router.push('/template-builder')} />
         <GameButton label="🃏  Freestyle Battle" variant="blue" onPress={() => router.push('/workout')} />
       </View>
     </View>
@@ -46,5 +47,5 @@ export default function GymScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, padding: spacing.lg },
   empty: { ...typography.body, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xl },
-  footer: { paddingTop: spacing.md },
+  footer: { paddingTop: spacing.md, gap: spacing.sm },
 });

@@ -30,6 +30,8 @@ interface ActiveWorkoutState {
   totalXp: number;
 
   start: (opts: { templateId: string | null; exercises: ActiveExercise[]; bests: Record<string, ExerciseBests> }) => void;
+  /** Adds an exercise mid-workout (freestyle mode). No-op if already present. */
+  addExercise: (exercise: ActiveExercise, bests?: ExerciseBests) => void;
   logSet: (exerciseId: string, set: { weightKg: number; reps: number; rpe?: number }) => LoggedSet | null;
   reset: () => void;
 }
@@ -48,6 +50,15 @@ export const useActiveWorkout = create<ActiveWorkoutState>((set, get) => ({
 
   start: ({ templateId, exercises, bests }) =>
     set({ startedAt: new Date().toISOString(), templateId, exercises, bests, totalXp: 0 }),
+
+  addExercise: (exercise, bests) => {
+    const state = get();
+    if (state.exercises.some((e) => e.exerciseId === exercise.exerciseId)) return;
+    set({
+      exercises: [...state.exercises, exercise],
+      bests: bests ? { ...state.bests, [exercise.exerciseId]: bests } : state.bests,
+    });
+  },
 
   logSet: (exerciseId, input) => {
     const state = get();

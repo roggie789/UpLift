@@ -1,10 +1,10 @@
-import { MMKV } from 'react-native-mmkv';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const storage = new MMKV({ id: 'uplift' });
-
-// Sync storage adapter for the TanStack Query persister
-export const mmkvStorage = {
-  getItem: (key: string) => storage.getString(key) ?? null,
-  setItem: (key: string, value: string) => storage.set(key, value),
-  removeItem: (key: string) => storage.delete(key),
-};
+/**
+ * Async key-value storage used by the TanStack Query persister and
+ * Supabase auth session storage.
+ *
+ * AsyncStorage works inside Expo Go. Swap for react-native-mmkv later
+ * if we move to a dev build and want synchronous, faster storage.
+ */
+export const kvStorage = AsyncStorage;

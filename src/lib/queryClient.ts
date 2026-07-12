@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
-import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
-import { mmkvStorage } from './storage';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import { kvStorage } from './storage';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -25,7 +25,7 @@ export const queryClient = new QueryClient({
   },
 });
 
-export const queryPersister = createSyncStoragePersister({
-  storage: mmkvStorage,
+export const queryPersister = createAsyncStoragePersister({
+  storage: kvStorage,
   key: 'uplift-query-cache',
 });
