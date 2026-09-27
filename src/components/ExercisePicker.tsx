@@ -15,7 +15,7 @@ interface Props {
   /** Exercise ids to hide (already added) */
   excludeIds?: string[];
 }
-
+console.log('test');
 /** Full-screen modal for choosing an exercise from the library. */
 export function ExercisePicker({ visible, onClose, onPick, excludeIds = [] }: Props) {
   const [search, setSearch] = useState('');
